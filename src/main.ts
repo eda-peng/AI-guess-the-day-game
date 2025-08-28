@@ -2,7 +2,8 @@ export { };
 //import { Button, Input } from "@pixi/ui";
 //import { Application, Assets, Container, Graphics, Sprite, Text } from "pixi.js";
 import { Select, CheckBox } from '@pixi/ui';
-import * as PIXI from "pixi.js";
+import * as PIXI from 'pixi.js';
+import { sound } from '@pixi/sound';
 import { Application } from "pixi.js";
 declare global {
   interface GlobalThis {
@@ -25,6 +26,12 @@ declare global {
     resolution: Math.max(window.devicePixelRatio || 1, 2), // 避免模糊
     autoDensity: true, // 讓解析度適配 retina
   });
+
+  // 新增：載入音效資源
+  PIXI.Assets.add({ alias: 'correct-sound', src: 'sounds/correct.mp3' });
+  PIXI.Assets.add({ alias: 'incorrect-sound', src: 'sounds/incorrect.mp3' });
+  await PIXI.Assets.load(['correct-sound', 'incorrect-sound']);
+
   // 因打包異常註解
   // globalThis.__PIXI_APP__ = app; 
   document.getElementById("pixi-container")!.appendChild(app.canvas);
@@ -60,14 +67,19 @@ declare global {
   let timeScoreRatio = 2;
   let dateScoreRatio = 5;
   let selectedGameTime = 60; // 新增：儲存選擇的時間
-  const timeValues = [30, 60, 120]; // 新增：對應選項的值
-  const dateRangeValues = [ // 新增：日期範圍選項的值
-    "1900-2100-5",
-    "2000-2040-3",
-    "2020-2030-2",
-    "2025-2025-1"
+  const timeValues = [30, 60, 120];
+
+  // 使用物件陣列來管理日期範圍，更清晰
+  const dateRangeOptions = [
+    { label: "1900-2100", startYear: 1900, endYear: 2100, scoreRatio: 5 },
+    { label: "2000-2040", startYear: 2000, endYear: 2040, scoreRatio: 3 },
+    { label: "2020–2030", startYear: 2020, endYear: 2030, scoreRatio: 2 },
+    { label: "2025",      startYear: 2025, endYear: 2025, scoreRatio: 1 }
   ];
-  let selectedDateRangeValue = dateRangeValues[3]; // 新增：儲存選擇的日期範圍
+  // 從 dateRangeOptions 產生用於 Select 元件的標籤
+  const dateRangeLabels = dateRangeOptions.map(opt => opt.label);
+  // 儲存當前選擇的選項物件，而不是字串
+  let selectedDateRange = dateRangeOptions[3];
   let isAnswerVisible = false; // 新增：儲存「顯示答案」的狀態
 
   //物件函式
@@ -220,6 +232,19 @@ declare global {
   timerBox.x = 610;
   timerBox.y = 20;
   uiContainer.addChild(timerBox);
+
+  // 新增：建立提示文字
+  const hintContent = `1/10, 2/28, 3/7, 4/4, 5/9, 6/6, 7/11, 8/8, 9/5, 10/10, 11/7, 12/12
+1/11, 2/29 (閏年)`;
+  const hintTextStyle = new PIXI.TextStyle({ // 使用 [選擇時間] 的樣式
+    fontFamily: 'Arial',
+    fontSize: 18,
+    fill: "white",
+  });
+  const hintText = new PIXI.Text(hintContent, hintTextStyle);
+  hintText.visible = false; // 預設隱藏
+  uiContainer.addChild(hintText);
+
   
   // **按鈕**
   const nextButton = createButton("下一題", 650, 280, () => {
@@ -300,12 +325,6 @@ declare global {
   //uiContainer.addChild(timeSelectPixi);
 
   // **PixiUI 日期範圍選擇 (Select 版本)**
-  const dateRangeLabels = [
-    "1900-2100",
-    "2000-2040",
-    "2020–2030",
-    "2025"
-  ];
   const dateRangeSelectLabel = new PIXI.Text('日期範圍：', { ...textStyle, fontSize: 16, fill: 'black' });
   uiContainer.addChild(dateRangeSelectLabel);
 
@@ -341,7 +360,7 @@ declare global {
       }
   });
   dateRangeSelectPixi.onSelect.connect((value) => {
-      selectedDateRangeValue = dateRangeValues[value];
+      selectedDateRange = dateRangeOptions[value];
       newGame();
   });
   dateRangeSelectPixi.on('pointerdown', () =>
@@ -377,6 +396,32 @@ declare global {
       answerText.visible = isAnswerVisible;
   });
   uiContainer.addChild(showAnswerCheckboxPixi);
+
+  // **PixiUI 顯示提示 CheckBox**
+  const showHintUncheckedBox = new PIXI.Graphics()
+      .lineStyle(2, 0x333333)
+      .drawRoundedRect(0, 0, 18, 18, 4)
+      .endFill();
+
+  const showHintCheckedBox = new PIXI.Graphics()
+      .lineStyle(2, 0x333333)
+      .beginFill(0x4CAF50) // 綠色
+      .drawRoundedRect(0, 0, 18, 18, 4)
+      .endFill();
+
+  const showHintCheckboxPixi = new CheckBox({
+      text: '顯示提示',
+      style: {
+          unchecked: showHintUncheckedBox,
+          checked: showHintCheckedBox,
+          text: { ...textStyle, fontSize: 16, fill: 'black' },
+          textOffset: { x: 4, y: -2 }
+      }
+  });
+  showHintCheckboxPixi.onCheck.connect((checked) => {
+      hintText.visible = checked;
+  });
+  uiContainer.addChild(showHintCheckboxPixi);
   //為避免遮擋由下往上新增
   uiContainer.addChild(dateRangeSelectPixi);
   uiContainer.addChild(timeSelectPixi);
@@ -427,25 +472,39 @@ declare global {
   });
 
   const tutorialTextContent = `
-  1.  計算基準日星期：2025年基準日為星期五，通過計算得到該年基準日星期。
-      如2030年為 5(2025年為星期五) + 5(2030-2025) + 1(2028年為閏年) 
-      = 11 
-      = 4 (mod 7)  
-      因此2030年基準日為星期四。
-  2.  找到該月基準日：
-      (1).  2以外的偶數月份的基準日為月份相同日期。
-            如4/4、6/6、8/8、...、12/12。
-      (2).  大奇數以7-11來記。
-            3/7、5/9、7/11、9/5、11/7。
-      (3).  1、2月要注意閏年，閏年會晚一天。
-            1/10、2/28(閏年為1/11、2/29)。
-      如8/28為8月，找到基準日為8/8。
-  3.  計算基準日差距。
-      如2025/8/28為8月，找到基準日為8/8。
-      5(2025年的基準日星期) + 28(目標28號) - 8(基準日8號)
-      = 25
-      = 4 (mod 7)
-      因此2025/8/28是星期四。
+  1. 基準日
+    我們注意到每年的4/4、6/6、8/8、10/10、12/12的星期皆為同一天，
+    以2025為例，這些日子皆為星期五，因此我們能藉此更快速的推算過去
+    或未來的某天是星期幾。
+    為了幫助我們更快計算，我們將一年中每個月都找一天相同星期的日子
+    來做推算，例如選擇：
+    1/10、2/28(閏年為1/11、2/29)、3/7、5/9、7/11、9/5、11/7。
+    在2025年以上日期皆為星期五，你可以自行挑選基準日來記憶。
+
+    有了基準日，我們可以快速推算某日是星期幾。
+    如目標日期為2025/8/28，因為是8月，找到基準日為8/8。
+    5(2025年的基準日星期五) + 28(目標28號) - 8(基準日8號)
+    = 25
+    = 4 (mod 7)
+    因此2025/8/28是星期四。
+
+  2. 跨年度計算
+    學會基準日的計算後，我們就能推算出2025年以外的日期是星期幾了。
+    可以先算出該年的基準日星期幾，再進行我們已經會的[1. 基準日]的計算。
+
+    以目標日期為2030/9/28為例。
+    (1) 先計算2030年的基準日為星期幾。 
+    5(2025年的基準日星期五) + 5(2030-2025) + 1(2028年為閏年)
+    = 11 
+    = 4 (mod 7)  
+    因此2030年基準日為星期四。
+    (2) 接下來使用[1. 基準日]的計算方法。因為是9月，找到基準日為9/5。
+    4(2025年的基準日星期五) + 28(目標28號) - 5(基準日5號)
+    = 27
+    = 6 (mod 7)
+    因此2030/9/28是星期六。
+
+  以上是遊戲介紹，感謝遊玩！
   `;
 
   const tutorialText = new PIXI.Text(tutorialTextContent, tutorialTextStyle);
@@ -470,6 +529,39 @@ declare global {
           const minY = scrollAreaHeight - tutorialText.height; // 滾動的下邊界
           const maxY = 0; // 滾動的上邊界
           tutorialText.y = Math.max(minY, Math.min(newY, maxY)); // 確保 y 座標在邊界內
+      }
+  });
+
+  // 新增：處理手機觸控滑動
+  let draggingTutorial = false;
+  let previousY: number;
+
+  scrollableTextContainer.on('pointerdown', (event) => {
+      if (tutorialText.height > scrollAreaHeight) {
+          draggingTutorial = true;
+          previousY = event.global.y;
+      }
+  });
+
+  scrollableTextContainer.on('pointerup', () => {
+      draggingTutorial = false;
+  });
+
+  scrollableTextContainer.on('pointerupoutside', () => {
+      draggingTutorial = false;
+  });
+
+  scrollableTextContainer.on('pointermove', (event) => {
+      if (draggingTutorial) {
+          const newY = event.global.y;
+          const deltaY = newY - previousY;
+          previousY = newY;
+
+          const minY = scrollAreaHeight - tutorialText.height;
+          const maxY = 0;
+          const targetY = tutorialText.y + deltaY;
+
+          tutorialText.y = Math.max(minY, Math.min(targetY, maxY));
       }
   });
 
@@ -542,6 +634,7 @@ declare global {
   }
   // 加分
   function addScore() {
+    sound.play('correct-sound');
     if(isAnswerVisible == true) return;
     curScore += 1 * timeScoreRatio * dateScoreRatio;
     console.log(timeScoreRatio + ":" + dateScoreRatio);
@@ -550,6 +643,7 @@ declare global {
   }
   // 扣分
   function reduceScore() {
+    sound.play('incorrect-sound');
     if (isAnswerVisible == true) return;
     curScore -= 1 * timeScoreRatio * dateScoreRatio;
     console.log(timeScoreRatio + ":" + dateScoreRatio);
@@ -575,7 +669,8 @@ declare global {
   }
   // 隨機日期
   function getRandomDate() {
-    const [startYear, endYear, scoreRatio] = selectedDateRangeValue.split('-').map(Number);
+    // 直接從物件中讀取，不再需要解析字串
+    const { startYear, endYear, scoreRatio } = selectedDateRange;
     dateScoreRatio = scoreRatio;
 
     const startDate = new Date(startYear, 0, 1);
@@ -647,6 +742,10 @@ declare global {
     answerBox.x = questionBox.x + questionBox.width + questionAnswerPadding;
     answerBox.y = questionBox.y;
 
+    // 新增：定位提示文字
+    hintText.x = designWidth / 2 - hintText.width / 2;
+    hintText.y = questionBox.y - hintText.height - 10;
+
     const totalAnswerButtonWidth = (answerButtonWidth * 7) + (answerButtonSpacing * 6);
     answerButtonsContainer.x = designWidth / 2 - totalAnswerButtonWidth / 2;
     answerButtonsContainer.y = designHeight * 0.65;
@@ -679,6 +778,10 @@ declare global {
     dateRangeSelectLabel.y = dateRangeSelectPixi.y + (dateRangeSelectPixi.height / 2) - (dateRangeSelectLabel.height / 2);
     showAnswerCheckboxPixi.x = designWidth - showAnswerCheckboxPixi.width - padding;
     showAnswerCheckboxPixi.y = dateRangeSelectPixi.y + dateRangeSelectPixi.height + 15;
+    
+    // 新增：定位提示 CheckBox
+    showHintCheckboxPixi.x = designWidth - showHintCheckboxPixi.width - padding;
+    showHintCheckboxPixi.y = showAnswerCheckboxPixi.y + showAnswerCheckboxPixi.height + 15;
 
     // 2. 根據實際螢幕尺寸，計算縮放比例並置中整個 UI 容器
     const scale = Math.min(app.screen.width / designWidth, app.screen.height / designHeight);
