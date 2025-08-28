@@ -1,7 +1,7 @@
 export { };
 //import { Button, Input } from "@pixi/ui";
 //import { Application, Assets, Container, Graphics, Sprite, Text } from "pixi.js";
-import { Select, RadioGroup, CheckBox } from '@pixi/ui';
+import { Select, CheckBox } from '@pixi/ui';
 import * as PIXI from "pixi.js";
 import { Application } from "pixi.js";
 declare global {
@@ -51,33 +51,7 @@ declare global {
     5: "星期五",
     6: "星期六",
   };
-  const weekToNumberMap: Record<string, number> = {
-    "日": 0,
-    "天": 0,
-    "一": 1,
-    "二": 2,
-    "三": 3,
-    "四": 4,
-    "五": 5,
-    "六": 6,
-    "七": 0,
-    "星期日": 0,
-    "星期天": 0,
-    "星期一": 1,
-    "星期二": 2,
-    "星期三": 3,
-    "星期四": 4,
-    "星期五": 5,
-    "星期六": 6,
-    "0": 0,
-    "1": 1,
-    "2": 2,
-    "3": 3,
-    "4": 4,
-    "5": 5,
-    "6": 6,
-    "7": 0,
-  };
+  
   let targetDate = new Date
   let targetDateWeek = 0;
   let curScore = 0; 
@@ -271,6 +245,12 @@ declare global {
   });
   uiContainer.addChild(clearHighScoreButton);
 
+  // **新增遊戲教學按鈕**
+  const tutorialButton = createButton("遊戲教學", 30, 180, () => {
+      openTutorial();
+  });
+  uiContainer.addChild(tutorialButton);
+
   // **PixiUI 時間選擇**
   const timeSelectLabel = new PIXI.Text('選擇時間：', { ...textStyle, fontSize: 16, fill: 'black' });
   uiContainer.addChild(timeSelectLabel);
@@ -401,6 +381,106 @@ declare global {
   uiContainer.addChild(dateRangeSelectPixi);
   uiContainer.addChild(timeSelectPixi);
 
+  // **遊戲教學畫面**
+  const tutorialContainer = new PIXI.Container();
+  tutorialContainer.visible = false;
+  uiContainer.addChild(tutorialContainer);
+
+  const tutorialBg = new PIXI.Graphics();
+  tutorialBg.beginFill(0x000000, 0.8);
+  tutorialBg.drawRect(0, 0, 850, 450); // 使用設計尺寸以覆蓋整個 UI 容器
+  tutorialBg.endFill();
+  tutorialContainer.addChild(tutorialBg);
+ 
+  // 新增一個標題
+  const tutorialTitle = new PIXI.Text("遊戲教學", {
+      fontFamily: "Arial",
+      fontSize: 28,
+      fill: "white",
+      align: 'center'
+  });
+  tutorialTitle.anchor.set(0.5);
+  tutorialTitle.x = 850 / 2;
+  tutorialTitle.y = 35; // 標題 Y 位置
+  tutorialContainer.addChild(tutorialTitle);
+
+  // 1. 定義滾動區域的尺寸和位置
+  const scrollAreaPadding = { top: 70, right: 50, bottom: 90, left: 50 };
+  const scrollAreaWidth = 850 - scrollAreaPadding.left - scrollAreaPadding.right;
+  const scrollAreaHeight = 450 - scrollAreaPadding.top - scrollAreaPadding.bottom;
+
+  // 2. 建立一個容器來放置可滾動的文字
+  const scrollableTextContainer = new PIXI.Container();
+  scrollableTextContainer.x = scrollAreaPadding.left;
+  scrollableTextContainer.y = scrollAreaPadding.top;
+  tutorialContainer.addChild(scrollableTextContainer);
+
+  // 3. 建立文字物件
+  const tutorialTextStyle = new PIXI.TextStyle({
+      fontFamily: "Arial",
+      fontSize: 20,
+      fill: "white",
+      wordWrap: true,
+      wordWrapWidth: scrollAreaWidth - 20, // 讓文字和邊緣有點間距
+      align: 'left',
+      lineHeight: 30,
+  });
+
+  const tutorialTextContent = `
+  1.  計算基準日星期：2025年基準日為星期五，通過計算得到該年基準日星期。
+      如2030年為 5(2025年為星期五) + 5(2030-2025) + 1(2028年為閏年) 
+      = 11 
+      = 4 (mod 7)  
+      因此2030年基準日為星期四。
+  2.  找到該月基準日：
+      (1).  2以外的偶數月份的基準日為月份相同日期。
+            如4/4、6/6、8/8、...、12/12。
+      (2).  大奇數以7-11來記。
+            3/7、5/9、7/11、9/5、11/7。
+      (3).  1、2月要注意閏年，閏年會晚一天。
+            1/10、2/28(閏年為1/11、2/29)。
+      如8/28為8月，找到基準日為8/8。
+  3.  計算基準日差距。
+      如2025/8/28為8月，找到基準日為8/8。
+      5(2025年的基準日星期) + 28(目標28號) - 8(基準日8號)
+      = 25
+      = 4 (mod 7)
+      因此2025/8/28是星期四。
+  `;
+
+  const tutorialText = new PIXI.Text(tutorialTextContent, tutorialTextStyle);
+  tutorialText.x = 10; // 在 scrollableTextContainer 內的 x 偏移
+  tutorialText.y = 0;
+  scrollableTextContainer.addChild(tutorialText);
+
+  // 4. 建立遮罩 (Mask)
+  const scrollMask = new PIXI.Graphics();
+  scrollMask.beginFill(0xFFFFFF); // 遮罩的顏色和透明度不重要
+  scrollMask.drawRect(scrollableTextContainer.x, scrollableTextContainer.y, scrollAreaWidth, scrollAreaHeight);
+  scrollMask.endFill();
+  tutorialContainer.addChild(scrollMask); // 遮罩本身也需要被加到場景中
+  scrollableTextContainer.mask = scrollMask;
+
+  // 5. 讓滾動區域可以互動，以接收滾輪事件
+  scrollableTextContainer.eventMode = 'static';
+  scrollableTextContainer.on('wheel', (event) => {
+      // 只有當文字內容高度大於可視區域高度時，才允許滾動
+      if (tutorialText.height > scrollAreaHeight) {
+          const newY = tutorialText.y - event.deltaY * 0.5; // 乘以一個係數可以調整滾動速度
+          const minY = scrollAreaHeight - tutorialText.height; // 滾動的下邊界
+          const maxY = 0; // 滾動的上邊界
+          tutorialText.y = Math.max(minY, Math.min(newY, maxY)); // 確保 y 座標在邊界內
+      }
+  });
+
+  const tutorialCloseButton = createButton("關閉", 0, 0, () => {
+      closeTutorial();
+  });
+  // 將關閉按鈕置中於教學畫面底部
+  tutorialCloseButton.x = 850 / 2 - tutorialCloseButton.width / 2;
+  tutorialCloseButton.y = 450 - 60; // 調整按鈕位置
+  tutorialContainer.addChild(tutorialCloseButton);
+
   // **新增猜題按鈕**
   const answerButtonsContainer = new PIXI.Container();
   uiContainer.addChild(answerButtonsContainer);
@@ -421,6 +501,19 @@ declare global {
 
 
   // **各種函式**
+  function openTutorial() {
+    clearInterval(timerInterval);
+    tutorialContainer.visible = true;
+    // 確保教學畫面在最上層
+    uiContainer.setChildIndex(tutorialContainer, uiContainer.children.length - 1);
+    tutorialText.y = 0; // 每次打開時，都將文字滾動回頂部
+  }
+
+  function closeTutorial() {
+    startCountdown(timeLeft); // 用剩餘時間繼續倒數
+    tutorialContainer.visible = false;
+  }
+
   // 時間
   function startCountdown(seconds: number) {
     timeLeft = seconds;
@@ -443,12 +536,22 @@ declare global {
     if (guessedWeek == targetDateWeek) {
       addScore();
       newQuestion();
+    }else{
+      reduceScore();
     }
   }
   // 加分
   function addScore() {
     if(isAnswerVisible == true) return;
     curScore += 1 * timeScoreRatio * dateScoreRatio;
+    console.log(timeScoreRatio + ":" + dateScoreRatio);
+    scoreText.text = `得分：${curScore}`;
+    updateBackground(scoreBg, scoreText);
+  }
+  // 扣分
+  function reduceScore() {
+    if (isAnswerVisible == true) return;
+    curScore -= 1 * timeScoreRatio * dateScoreRatio;
     console.log(timeScoreRatio + ":" + dateScoreRatio);
     scoreText.text = `得分：${curScore}`;
     updateBackground(scoreBg, scoreText);
@@ -562,6 +665,8 @@ declare global {
     resetGameButten.y = designHeight - 60;
     clearHighScoreButton.x = padding;
     clearHighScoreButton.y = resetGameButten.y - 50;
+    tutorialButton.x = padding;
+    tutorialButton.y = clearHighScoreButton.y - 50;
 
     // 右側 UI
     timeSelectPixi.x = designWidth - timeSelectPixi.width - padding;

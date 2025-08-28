@@ -1,9 +1,9 @@
-import { defineConfig } from "vite";
+import { defineConfig } from 'vite';
 
-// https://vite.dev/config/
+// https://vitejs.dev/config/
 export default defineConfig({
-  server: {
-    port: 8080,
-    open: true,
-  },
+  base: '/AI-guess-the-day-game/', // 請確認這是您的 GitHub 儲存庫名稱
+  build: {
+    outDir: 'dist'
+  }
 });
